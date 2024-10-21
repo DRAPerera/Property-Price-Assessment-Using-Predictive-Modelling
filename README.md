@@ -43,3 +43,5 @@ The dataset used contains 31 variables that are directly related to property sal
 1. **Clone this repository**:
    ```bash
    git clone https://github.com/DRAPerera/property-price-assessment-using-predictive-modelling.git
+
+You can also refer the Property Price Assessment Using Predictive Modelling - Report (pdf) attached herewith for steps and explanations
