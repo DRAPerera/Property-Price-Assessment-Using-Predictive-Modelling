@@ -1,0 +1,777 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(Amelia)
+library(corrplot)
+library(caret)
+library(plotly)
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(readr)
+library(psych)
+library(DescTools)
+library(purrr)
+library(tidyr)
+```
+
+Part B – Data Exploration and Cleaning
+
+1. c.
+```{r}
+# Load the dataset
+Housing_Valuation <- read.csv("HousingValuation.csv")
+
+### CONVERTING NOMINAL VARIABLES TO NUMERICALS BY ONE-HOT ENCODING
+
+# Variables for one-hot encoding
+nominal_vars <- Housing_Valuation[, c("LandContour", "Utilities", "LotConfig", "DwellClass", "CentralAir", "GarageType", "PavedDrive")]
+
+# One hot encoding using dummy variables
+dummies <- dummyVars(~ ., data = nominal_vars, fullRank = TRUE)
+categorical_dummies <- predict(dummies, newdata = nominal_vars)
+
+# Combining  one-hot encoded variables to the rest of the data
+Housing_Valuation <- cbind(Housing_Valuation[, !(names(Housing_Valuation) %in% c("LandContour", "Utilities", "LotConfig", "DwellClass", "CentralAir", "GarageType", "PavedDrive"))], categorical_dummies)
+
+
+### CONVERTING ORDINAL VARIABLES TO NUMERICALS BY INTEGER ENCODING
+
+# Define integer encoding for Slope
+Housing_Valuation$Slope <- as.integer(factor(Housing_Valuation$Slope, levels = c("Gtl", "Mod", "Sev"), labels = c(1, 2, 3)))
+# Define integer encoding for ExteriorCondition
+Housing_Valuation$ExteriorCondition <- as.integer(factor(Housing_Valuation$ExteriorCondition, levels = c("Ex", "Gd", "TA", "Fa", "Po"), labels = c(1, 2, 3, 4, 5)))
+# Define integer encoding for BasementCondition
+Housing_Valuation$BasementCondition <- as.integer(factor(Housing_Valuation$BasementCondition, levels = c("Ex", "Gd", "TA", "Fa", "Po", "NB"), labels = c(1, 2, 3, 4, 5, 6)))
+# Define integer encoding for KitchenQuality
+Housing_Valuation$KitchenQuality <- as.integer(factor(Housing_Valuation$KitchenQuality, levels = c("Ex", "Gd", "TA", "Fa", "Po"), labels = c(1, 2, 3, 4, 5)))
+
+print(head(Housing_Valuation))
+```
+
+
+2. a.
+```{r}
+# Load the dataset
+HousingValuation <- read.csv("HousingValuation.csv")
+
+# Calculate summary statistics for continuous variables
+continuous_vars <- c("LotArea", "TotalBSF", "LowQualFinSF", "LivingArea", "PoolArea", "OpenPorchSF", "SalePrice")
+
+summary_stats <- data.frame(
+  Variable = continuous_vars,
+  Mean = sapply(HousingValuation[continuous_vars], mean, na.rm = TRUE),
+  Median = sapply(HousingValuation[continuous_vars], median, na.rm = TRUE),
+  Max = sapply(HousingValuation[continuous_vars], max, na.rm = TRUE),
+  SD = sapply(HousingValuation[continuous_vars], sd, na.rm = TRUE)
+)
+
+print(summary_stats)
+
+# Calculate counts for categorical variables
+categorical_vars <- c("LotShape", "LandContour", "Utilities", "LotConfig", 
+                       "Slope", "DwellClass", "OverallQuality", "OverallCondition", 
+                       "ExteriorCondition", "BasementCondition", "CentralAir", 
+                       "KitchenQuality", "GarageType", "PavedDrive", "MoSold", "YrSold")
+
+# Calculate categorical variable count occurrences of each level
+for (var in categorical_vars) {
+  print(var)
+  print(table(HousingValuation[[var]]))
+}
+
+```
+
+2.b.
+```{r}
+# Boxplots for visualizing outliers
+par(mfrow = c(1, 7))  # Adjust layout to fit all plots
+for (var in continuous_vars) {
+  boxplot(HousingValuation[[var]], main = var, ylab = var)
+}
+
+# Calculate IQR and identify outliers
+outlier_detection <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  outliers <- x[x < lower_bound | x > upper_bound]
+  return(outliers)
+}
+
+outliers_list <- lapply(HousingValuation[continuous_vars], outlier_detection)
+outliers_summary <- data.frame(
+  Variable = continuous_vars,
+  Num_Outliers = sapply(outliers_list, length)
+)
+
+print(outliers_summary)
+```
+
+
+3
+
+```{r}
+# Load the dataset
+HousingValuation <- read.csv("HousingValuation.csv")
+
+# Define continuous variables
+continuous_vars <- c("LotArea", "TotalBSF", "LowQualFinSF", "LivingArea", "PoolArea", "OpenPorchSF", "SalePrice")
+
+# Create a function to plot histograms and calculate summary statistics
+plot_histograms_and_summary <- function(data, vars) {
+  
+  # Create an empty data frame to store summary statistics
+  summary_stats <- data.frame(
+    Variable = vars,
+    Mean = numeric(length(vars)),
+    Median = numeric(length(vars)),
+    Max = numeric(length(vars)),
+    SD = numeric(length(vars))
+  )
+  
+  # Loop through each variable
+  for (i in 1:length(vars)) {
+    var <- vars[i]
+    
+    # Plot histogram for each variable in a different window and color
+    hist(data[[var]], main = paste("Histogram of", var), xlab = var, 
+         col = rainbow(length(vars))[i], border = "black", breaks = 100)
+    
+    # Calculate summary statistics
+    summary_stats[i, "Mean"] <- mean(data[[var]], na.rm = TRUE)
+    summary_stats[i, "Median"] <- median(data[[var]], na.rm = TRUE)
+    summary_stats[i, "Max"] <- max(data[[var]], na.rm = TRUE)
+    summary_stats[i, "SD"] <- sd(data[[var]], na.rm = TRUE)
+  }
+  
+  return(summary_stats)
+}
+
+# Generate histograms and summary statistics
+summary_stats <- plot_histograms_and_summary(HousingValuation, continuous_vars)
+print(summary_stats)
+
+
+```
+
+
+
+
+4. A.
+```{r}
+# Check for missing values
+missing_values <- sapply(HousingValuation, function(x) sum(is.na(x)))
+missing_vars <- missing_values[missing_values > 0]
+print(missing_vars)
+```
+
+4. B.
+
+Handling missing values of YearBuilt
+
+```{r}
+HousingValuation <- read.csv("HousingValuation.csv")
+summary_original_year <- c(summary(HousingValuation$YearBuilt))
+print(summary_original_year)
+
+### Handling missing values of YearBuilt
+
+### Fill missing values in YearBuilt with the mean
+HousingValuation_filled <- HousingValuation
+HousingValuation_filled$YearBuilt[is.na(HousingValuation_filled$YearBuilt)] <- mean(HousingValuation_filled$YearBuilt, na.rm = TRUE)
+
+# Summary statistics for YearBuilt
+summary_filled_year <- c(summary(HousingValuation_filled$YearBuilt), SD = sd(HousingValuation_filled$YearBuilt, na.rm = TRUE))
+print(summary_filled_year)
+
+# Transformation plot
+hist(HousingValuation_filled$YearBuilt, main = "YearBuilt - Filled with Mean", xlab = "YearBuilt", col = "lightblue", breaks = 30)
+
+
+### Delete records with missing values in YearBuilt
+HousingValuation_deleted <- na.omit(HousingValuation)
+
+# Summary statistics for YearBuilt
+summary_deleted_year <- c(summary(HousingValuation_deleted$YearBuilt), SD = sd(HousingValuation_deleted$YearBuilt, na.rm = TRUE))
+print(summary_deleted_year)
+
+# Transformation plot
+hist(HousingValuation_deleted$YearBuilt, main = "YearBuilt - Records Deleted", xlab = "YearBuilt", col = "lightgreen", breaks = 30)
+
+
+### Replace missing values in YearBuilt with 0
+HousingValuation_zero <- HousingValuation
+HousingValuation_zero$YearBuilt[is.na(HousingValuation_zero$YearBuilt)] <- 0
+
+# Summary statistics for YearBuilt
+summary_zero_year <- c(summary(HousingValuation_zero$YearBuilt), SD = sd(HousingValuation_zero$YearBuilt, na.rm = TRUE))
+print(summary_zero_year)
+
+# Transformation plot
+hist(HousingValuation_zero$YearBuilt, main = "YearBuilt - Replaced with 0", xlab = "YearBuilt", col = "lightcoral", breaks = 30)
+
+
+
+### Original density plot
+plot(density(HousingValuation$YearBuilt, na.rm = TRUE), 
+     main = "Density Plot for YearBuilt (Original vs. Imputed Methods)",
+     xlab = "YearBuilt", ylab = "Density", col = "black", lwd = 2)
+
+# Fill missing values with the mean
+HousingValuation_filled <- HousingValuation
+HousingValuation_filled$YearBuilt[is.na(HousingValuation_filled$YearBuilt)] <- mean(HousingValuation_filled$YearBuilt, na.rm = TRUE)
+lines(density(HousingValuation_filled$YearBuilt), col = "blue", lwd = 2)
+
+# Delete records with missing values
+HousingValuation_deleted <- na.omit(HousingValuation)
+lines(density(HousingValuation_deleted$YearBuilt), col = "green", lwd = 2)
+
+# Replace missing values with 0
+HousingValuation_zero <- HousingValuation
+HousingValuation_zero$YearBuilt[is.na(HousingValuation_zero$YearBuilt)] <- 0
+lines(density(HousingValuation_zero$YearBuilt), col = "red", lwd = 2)
+
+# Add a legend
+legend("topright", 
+       legend = c("Original", "Filled with Mean", "Records Deleted", "Replaced with 0"), 
+       col = c("black", "blue", "green", "red"), 
+       lwd = 2)
+```
+
+Handling missing values of LivingArea
+
+```{r}
+HousingValuation <- read.csv("HousingValuation.csv")
+summary_original_living <- c(summary(HousingValuation$LivingArea))
+print(summary_original_living)
+
+### Handling missing values of LivingArea
+
+### Fill missing values in LivingArea with the mean
+HousingValuation_filled <- HousingValuation
+HousingValuation_filled$LivingArea[is.na(HousingValuation_filled$LivingArea)] <- mean(HousingValuation_filled$LivingArea, na.rm = TRUE)
+
+# Summary statistics for LivingArea
+summary_filled_living <- c(summary(HousingValuation_filled$LivingArea), SD = sd(HousingValuation_filled$LivingArea, na.rm = TRUE))
+print(summary_filled_living)
+
+# Transformation plot
+hist(HousingValuation_filled$LivingArea, main = "LivingArea - Filled with Mean", xlab = "LivingArea", col = "lightblue", breaks = 30)
+
+
+### Delete records with missing values in LivingArea
+HousingValuation_deleted <- na.omit(HousingValuation)
+
+# Summary statistics for LivingArea
+summary_deleted_living <- c(summary(HousingValuation_deleted$LivingArea), SD = sd(HousingValuation_deleted$LivingArea, na.rm = TRUE))
+print(summary_deleted_living)
+
+# Transformation plot
+hist(HousingValuation_deleted$LivingArea, main = "LivingArea - Records Deleted", xlab = "LivingArea", col = "lightgreen", breaks = 30)
+
+
+### Replace missing values in LivingArea with 0
+HousingValuation_zero <- HousingValuation
+HousingValuation_zero$LivingArea[is.na(HousingValuation_zero$LivingArea)] <- 0
+
+# Summary statistics for LivingArea
+summary_zero_living <- c(summary(HousingValuation_zero$LivingArea), SD = sd(HousingValuation_zero$LivingArea, na.rm = TRUE))
+print(summary_zero_living)
+
+# Transformation plot
+hist(HousingValuation_zero$LivingArea, main = "LivingArea - Replaced with 0", xlab = "LivingArea", col = "lightcoral", breaks = 30)
+
+
+### Original density plot
+plot(density(HousingValuation$LivingArea, na.rm = TRUE), 
+     main = "Density Plot for LivingArea (Original vs. Imputed Methods)",
+     xlab = "LivingArea", ylab = "Density", col = "black", lwd = 2)
+
+# Fill missing values with the mean
+HousingValuation_filled <- HousingValuation
+HousingValuation_filled$LivingArea[is.na(HousingValuation_filled$LivingArea)] <- mean(HousingValuation_filled$LivingArea, na.rm = TRUE)
+lines(density(HousingValuation_filled$LivingArea), col = "blue", lwd = 2)
+
+# Delete records with missing values
+HousingValuation_deleted <- na.omit(HousingValuation)
+lines(density(HousingValuation_deleted$LivingArea), col = "green", lwd = 2)
+
+# Replace missing values with 0
+HousingValuation_zero <- HousingValuation
+HousingValuation_zero$LivingArea[is.na(HousingValuation_zero$LivingArea)] <- 0
+lines(density(HousingValuation_zero$LivingArea), col = "red", lwd = 2)
+
+# Add a legend
+legend("topright", 
+       legend = c("Original", "Filled with Mean", "Records Deleted", "Replaced with 0"), 
+       col = c("black", "blue", "green", "red"), 
+       lwd = 2)
+```
+
+Handling Missing Values for GarageType (Categorical Variable)
+
+```{r}
+HousingValuation <- read.csv("HousingValuation.csv")
+summary_original_garage <- c(summary(HousingValuation$GarageType))
+print(summary_original_garage)
+
+### Handling missing values of GarageType
+
+### Function to calculate the mode
+calculate_mode <- function(x) {
+  uniqx <- unique(x[!is.na(x)])
+  uniqx[which.max(tabulate(match(x, uniqx)))]
+}
+
+### Fill missing values in GarageType with the mode
+mode_garage <- calculate_mode(HousingValuation$GarageType)
+HousingValuation_filled <- HousingValuation
+HousingValuation_filled$GarageType[is.na(HousingValuation_filled$GarageType)] <- mode_garage
+
+# Summary statistics for GarageType
+summary_filled_garage <- c(summary(HousingValuation_filled$GarageType))
+print(summary_filled_garage)
+
+# Transformation plot (bar plot for categorical variable)
+barplot(table(HousingValuation_filled$GarageType), 
+        main = "GarageType - Filled with Mode", 
+        xlab = "GarageType", col = "lightblue")
+
+
+### Delete records with missing values in GarageType
+HousingValuation_deleted <- na.omit(HousingValuation)
+
+# Summary statistics for GarageType
+summary_deleted_garage <- c(summary(HousingValuation_deleted$GarageType))
+print(summary_deleted_garage)
+
+# Transformation plot (bar plot for categorical variable)
+barplot(table(HousingValuation_deleted$GarageType), 
+        main = "GarageType - Records Deleted", 
+        xlab = "GarageType", col = "lightgreen")
+
+
+### Replace missing values in GarageType with "NA"
+HousingValuation_zero <- HousingValuation
+HousingValuation_zero$GarageType[is.na(HousingValuation_zero$GarageType)] <- "NA"
+
+# Summary statistics for GarageType
+summary_zero_garage <- c(summary(HousingValuation_zero$GarageType))
+print(summary_zero_garage)
+
+# Transformation plot (bar plot for categorical variable)
+barplot(table(HousingValuation_zero$GarageType), 
+        main = "GarageType - Replaced with 'NA'", 
+        xlab = "GarageType", col = "lightcoral")
+
+
+### Original bar plot
+barplot(table(HousingValuation$GarageType), 
+        main = "Bar Plot for GarageType (Original vs. Imputed Methods)",
+        xlab = "GarageType", ylab = "Frequency", col = "black")
+
+# Fill missing values with the mode
+barplot(table(HousingValuation_filled$GarageType), 
+        col = "blue", add = TRUE)
+
+# Delete records with missing values
+barplot(table(HousingValuation_deleted$GarageType), 
+        col = "green", add = TRUE)
+
+# Replace missing values with "NA"
+barplot(table(HousingValuation_zero$GarageType), 
+        col = "red", add = TRUE)
+
+# Add a legend
+legend("topright", 
+       legend = c("Original", "Filled with Mode", "Records Deleted", "Replaced with 'None'"), 
+       col = c("black", "blue", "green", "red"), 
+       fill = c("black", "blue", "green", "red"))
+
+```
+
+
+
+5
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(e1071) # For skewness function
+library(corrplot) # For correlation plots
+library(caret) # For findCorrelation function
+
+# Read the dataset
+HousingValuation <- read.csv("HousingValuation.csv")
+
+### TREATING MISSING VALUES
+
+# Replace NAs with the mean for 'YearBuilt'
+HousingValuation$YearBuilt[is.na(HousingValuation$YearBuilt)] <- mean(HousingValuation$YearBuilt, na.rm = TRUE)
+# Convert YearBuilt to whole numbers
+HousingValuation$YearBuilt <- round(HousingValuation$YearBuilt)
+
+# Replace NAs with the mean for 'LivingArea'
+HousingValuation$LivingArea[is.na(HousingValuation$LivingArea)] <- mean(HousingValuation$LivingArea, na.rm = TRUE)
+
+# Function to calculate mode
+calculate_mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+# Calculate the mode for 'GarageType', excluding 'NA' as a category
+mode_GarageType <- calculate_mode(HousingValuation$GarageType[HousingValuation$GarageType != "NA"])
+# Replace actual NAs with the mode, without altering the 'NA' category which denoted 'No Garage' in dataset
+HousingValuation$GarageType[is.na(HousingValuation$GarageType)] <- mode_GarageType
+
+
+missing_values <- colSums(is.na(HousingValuation))
+missing_values
+
+### CONVERTING NOMINAL VARIABLES TO NUMERICALS BY ONE-HOT ENCODING
+
+# Variables for one-hot encoding
+nominal_vars <- HousingValuation[, c("LandContour", "Utilities", "LotConfig", "DwellClass", "CentralAir", "GarageType", "PavedDrive")]
+
+# One hot encoding using dummy variables
+dummies <- dummyVars(~ ., data = nominal_vars, fullRank = TRUE)
+categorical_dummies <- predict(dummies, newdata = nominal_vars)
+
+# Combining  one-hot encoded variables to the rest of the data
+HousingValuation <- cbind(HousingValuation[, !(names(HousingValuation) %in% c("LandContour", "Utilities", "LotConfig", "DwellClass", "CentralAir", "GarageType", "PavedDrive"))], categorical_dummies)
+
+
+### CONVERTING ORDINAL VARIABLES TO NUMERICALS BY INTEGER ENCODING
+
+# Define integer encoding for Slope
+HousingValuation$Slope <- as.integer(factor(HousingValuation$Slope, levels = c("Gtl", "Mod", "Sev"), labels = c(1, 2, 3)))
+# Define integer encoding for ExteriorCondition
+HousingValuation$ExteriorCondition <- as.integer(factor(HousingValuation$ExteriorCondition, levels = c("Ex", "Gd", "TA", "Fa", "Po"), labels = c(1, 2, 3, 4, 5)))
+# Define integer encoding for BasementCondition
+HousingValuation$BasementCondition <- as.integer(factor(HousingValuation$BasementCondition, levels = c("Ex", "Gd", "TA", "Fa", "Po", "NB"), labels = c(1, 2, 3, 4, 5, 6)))
+# Define integer encoding for KitchenQuality
+HousingValuation$KitchenQuality <- as.integer(factor(HousingValuation$KitchenQuality, levels = c("Ex", "Gd", "TA", "Fa", "Po"), labels = c(1, 2, 3, 4, 5)))
+
+print(head(HousingValuation))
+
+
+### REMOVAL OF TARGET & ID COLUMNS
+
+# Define the target variable
+target_variable <- HousingValuation$SalePrice
+# Create a new dataframe excluding the target variable and the 'Id' column (because its unique)
+HousingValuation_predictors <- HousingValuation[, !names(HousingValuation) %in% c("SalePrice", "Id")]
+
+print(HousingValuation_predictors)
+
+
+### BUILDING CORRELATION MATRIX
+
+# Analyze correlation of attributes using ggcorr
+cor_matrix <- cor(HousingValuation_predictors)
+ggcorrplot(cor_matrix, lab = TRUE)
+
+# Getting correlation matrix using caret package
+M <- data.matrix(HousingValuation_predictors)
+corrM <- cor(M)
+
+# Correlation Matrix using caret package
+corr <- cor(HousingValuation_predictors)
+high_corr_vars <- findCorrelation(corr, cutoff = 0.5, names = TRUE)
+
+print(high_corr_vars)
+
+
+# Removal of variables to minimize inter-correlation
+HousingValuation_predictors_reduced <- subset(HousingValuation_predictors, select = -c(FullBath, TotalRmsAbvGrd, KitchenAbvGr, LandContourLvl, Slope))
+
+# Check dimensions
+print(dim(HousingValuation_predictors_reduced))
+
+# Evaluate Correlation of Dimensions of Reduced Dataset
+ggcorr(HousingValuation_predictors_reduced, label = TRUE)
+M <- data.matrix(HousingValuation_predictors_reduced)
+corrM <- cor(M)
+
+# Merge Target Variable to New Dataset
+HousingValuation_reduced <- cbind(HousingValuation_predictors_reduced, SalePrice = target_variable)
+
+# Print Final Dataset
+print(head(HousingValuation_reduced))
+
+### EXPLORING DISTRIBUTIONS AGAINST TARGET VARIABLE
+# Compute the correlation matrix including the target variable
+cor_matrix_with_target <- cor(HousingValuation_reduced)
+# Plot the correlation matrix with the target variable
+ggcorrplot(cor_matrix_with_target, method = "circle", type = "lower", 
+           lab = TRUE, title = "Correlation Matrix with SalePrice")
+# Extract correlation with SalePrice
+cor_saleprice<-cor_matrix_with_target["SalePrice",]
+# Print the correlation values with SalePrice
+print(cor_saleprice)
+```
+
+
+PART C - BUILDING PREDICTIVE MODELS
+
+1. Regression Modelling 
+As the model for predictive modelling, Linear Regression has been chosen since the target variable (SalesPrice) to be predicted in this dataset is Continuous.
+
+```{r}
+#Setting up the sample configuration
+#Here we define 2/3 as the training data sample size.
+smp_size <- floor(2/3 * nrow(HousingValuation_reduced)) 
+set.seed(2)
+
+#Sample the dataset
+HousingValuation_reduced <- HousingValuation_reduced[sample(nrow(HousingValuation_reduced)), ]
+
+#Creating the ‘train’ dataset
+HousingValuation.train <- HousingValuation_reduced[1:smp_size, ]
+HousingValuation.test <- HousingValuation_reduced[(smp_size+1):nrow(HousingValuation_reduced), ]
+
+#Building the predictive model
+
+#Specifying target and input variables
+formula = SalePrice ~.
+
+#Fitting the linear regression algorithm
+model <- lm(formula = formula, data = HousingValuation.train)
+
+# Display the coefficients of the linear regression model
+summary(model)$coefficients
+
+#Regrression Equation
+as.formula(
+  paste0("y ~ ", round(coefficients(model)[1],2), " + ", 
+         paste(sprintf("%.2f * %s",coefficients(model)[-1], 
+                       names(coefficients(model)[-1])),
+               collapse=" + ")
+         )
+  )
+
+#Making Predictions for test and train datasets
+HousingValuation.train$predicted.SalePrice <- predict(model, HousingValuation.train)
+HousingValuation.test$predicted.SalePrice <- predict(model, HousingValuation.test)
+ 
+print("Actual Values") 
+head(HousingValuation.test$SalePrice[1:5])
+print("Predicted Values")
+head(HousingValuation.test$predicted.SalePrice[1:5])
+
+#Plot Predicted values vs Actual values of the target variable
+pl1 <-HousingValuation.test %>% 
+  ggplot(aes(SalePrice,predicted.SalePrice)) + 
+  geom_point(alpha=0.5) + stat_smooth(aes(colour='red')) + 
+  xlab('Actual value of SalesPrice') + 
+  ylab('Predicted value of SalesPrice')+ 
+  theme_bw()
+ggplotly(pl1)
+
+#Calculate RMSE
+error <- HousingValuation.test$SalePrice-HousingValuation.test$predicted.SalePrice 
+rmse <- sqrt(mean(error^2))
+print(paste("Root Mean Square Error: ", rmse))
+
+#Calculate the R-squared value
+r_squared <- summary(model)$r.squared 
+print(paste("R Squared: ", r_squared))
+```
+
+MODEL 2 
+```{r}
+# Define the reduced dataset with selected variables
+HousingValuation_reduced_vars <- HousingValuation_reduced[, c("LotArea", "OverallQuality", "YearBuilt", "LivingArea", "HalfBath", "BedroomAbvGr", "KitchenQuality", "Fireplaces", "GarageCars", "PoolArea", "OpenPorchSF", "MoSold", "YrSold", "CentralAirY", "GarageTypeAttchd", "GarageTypeBuiltIn", "GarageTypeDetchd", "PavedDriveY", "SalePrice")]
+
+# Fit the linear regression model
+model2 <- lm(SalePrice ~ ., data = HousingValuation_reduced_vars)
+
+# Summarize the initial model
+summary(model2)
+
+# Display the coefficients of the linear regression model
+summary(model2)$coefficients
+
+#Regrression Equation
+as.formula(
+  paste0("y ~ ", round(coefficients(model2)[1],2), " + ", 
+         paste(sprintf("%.2f * %s",coefficients(model2)[-1], 
+                       names(coefficients(model2)[-1])),
+               collapse=" + ")
+         )
+  )
+
+#Making Predictions for test and train datasets
+HousingValuation.train$predicted.SalePrice <- predict(model2, HousingValuation.train)
+HousingValuation.test$predicted.SalePrice <- predict(model2, HousingValuation.test)
+ 
+print("Actual Values") 
+head(HousingValuation.test$SalePrice[1:5])
+print("Predicted Values")
+head(HousingValuation.test$predicted.SalePrice[1:5])
+
+#Plot Predicted values vs Actual values of the target variable
+pl1 <-HousingValuation.test %>% 
+  ggplot(aes(SalePrice,predicted.SalePrice)) + 
+  geom_point(alpha=0.5) + stat_smooth(aes(colour='red')) + 
+  xlab('Actual value of SalesPrice') + 
+  ylab('Predicted value of SalesPrice')+ 
+  theme_bw()
+ggplotly(pl1)
+
+#Calculate RMSE
+error <- HousingValuation.test$SalePrice-HousingValuation.test$predicted.SalePrice 
+rmse <- sqrt(mean(error^2))
+print(paste("Root Mean Square Error: ", rmse))
+
+#Calculate the R-squared value
+r_squared <- summary(model2)$r.squared 
+print(paste("R Squared: ", r_squared))
+```
+
+
+MODEL 3 
+```{r}
+# Define the refined dataset excluding insignificant variables
+HousingValuation_refined <- HousingValuation_reduced[, c("LotArea", "OverallQuality", "YearBuilt", "LivingArea", "HalfBath", "BedroomAbvGr", "KitchenQuality", "Fireplaces", "GarageCars", "GarageTypeAttchd", "GarageTypeBuiltIn", "SalePrice")]
+
+# Fit the new linear regression model
+model3 <- lm(SalePrice ~ ., data = HousingValuation_refined)
+
+# Summarize the refined model
+summary(model3)
+
+# Display the coefficients of the linear regression model
+summary(model3)$coefficients
+
+#Regrression Equation
+as.formula(
+  paste0("y ~ ", round(coefficients(model3)[1],2), " + ", 
+         paste(sprintf("%.2f * %s",coefficients(model3)[-1], 
+                       names(coefficients(model3)[-1])),
+               collapse=" + ")
+         )
+  )
+
+#Making Predictions for test and train datasets
+HousingValuation.train$predicted.SalePrice <- predict(model3, HousingValuation.train)
+HousingValuation.test$predicted.SalePrice <- predict(model3, HousingValuation.test)
+ 
+print("Actual Values") 
+head(HousingValuation.test$SalePrice[1:5])
+print("Predicted Values")
+head(HousingValuation.test$predicted.SalePrice[1:5])
+
+#Plot Predicted values vs Actual values of the target variable
+pl1 <-HousingValuation.test %>% 
+  ggplot(aes(SalePrice,predicted.SalePrice)) + 
+  geom_point(alpha=0.5) + stat_smooth(aes(colour='red')) + 
+  xlab('Actual value of SalesPrice') + 
+  ylab('Predicted value of SalesPrice')+ 
+  theme_bw()
+ggplotly(pl1)
+
+#Calculate RMSE
+error <- HousingValuation.test$SalePrice-HousingValuation.test$predicted.SalePrice 
+rmse <- sqrt(mean(error^2))
+print(paste("Root Mean Square Error: ", rmse))
+
+#Calculate the R-squared value
+r_squared <- summary(model3)$r.squared 
+print(paste("R Squared: ", r_squared))
+```
+
+
+2. Decision Tree Modelling
+
+```{r}
+#install.packages('rpart', dependencies = TRUE)
+#install.packages('rpart.plot', dependencies = TRUE)
+
+library(rpart)
+library(rpart.plot)
+
+#Partition the data
+smp_size <- floor(2/3 * nrow(HousingValuation_reduced)) 
+set.seed(2)
+
+#Sample the dataset
+HousingValuation_reduced.dt <- HousingValuation_reduced[sample(nrow(HousingValuation_reduced)), ]
+
+HousingValuation.train.dt <- HousingValuation_reduced.dt[1:smp_size, ]
+HousingValuation.test.dt <- HousingValuation_reduced.dt[(smp_size+1):nrow(HousingValuation_reduced.dt), ]
+
+#Build the decision tree model
+
+#Specifying target and input variables
+formula = SalePrice ~.
+
+#Define the decision tree parameters
+dtree <- rpart(formula, data= HousingValuation.train.dt, method="anova")
+
+#Check feature importance
+dtree$variable.importance
+
+#Visualize the decision tree
+rpart.plot(dtree, type = 4, fallen.leaves = FALSE)
+
+print(dtree)
+
+#Predictions
+predicted.SalePrice <- predict(dtree, HousingValuation.test.dt) 
+print("Actual Values") 
+head(HousingValuation.test.dt$SalePrice[1:5])
+print("Predicted Values") 
+head(predicted.SalePrice[1:5])
+
+#Model assessment
+error <- HousingValuation.test.dt$SalePrice - predicted.SalePrice
+rmse <- sqrt(mean(error^2))
+print(paste("Root Mean Square Error: ", rmse))
+
+#Finding the best CP value
+printcp(dtree)
+dtree$cptable[which.min(dtree$cptable[,"xerror"]),"CP"]
+
+#Prune the tree with best cp value (complexity parameter)
+ pruned_dtree <- prune(dtree, cp = 0.01) 
+ rpart.plot(pruned_dtree, type = 4, fallen.leaves = FALSE)
+ 
+#Model Assessment 
+predicted_pruned.SalePrice <- predict(pruned_dtree, HousingValuation.test) 
+error_new <- HousingValuation.test$SalePrice - predicted_pruned.SalePrice
+rmse_new <- sqrt(mean(error_new^2))
+print(paste("Root Mean Square Error: ", rmse_new))
+```
+
+DECISION TREE 2
+```{r}
+#Prune the tree with a value greater than best cp value
+ pruned_dtree <- prune(dtree, cp = 0.03) 
+ rpart.plot(pruned_dtree, type = 4, fallen.leaves = FALSE)
+ 
+#Model Assessment 
+predicted_pruned.SalePrice <- predict(pruned_dtree, HousingValuation.test) 
+error_new <- HousingValuation.test$SalePrice - predicted_pruned.SalePrice
+rmse_new <- sqrt(mean(error_new^2))
+print(paste("Root Mean Square Error: ", rmse_new))
+```
+
+DECISION TREE 3
+```{r}
+#Prune the tree with a value lesser than best cp value
+ pruned_dtree <- prune(dtree, cp = 0.001) 
+ rpart.plot(pruned_dtree, type = 4, fallen.leaves = FALSE)
+ 
+#Model Assessment 
+predicted_pruned.SalePrice <- predict(pruned_dtree, HousingValuation.test) 
+error_new <- HousingValuation.test$SalePrice - predicted_pruned.SalePrice
+rmse_new <- sqrt(mean(error_new^2))
+print(paste("Root Mean Square Error: ", rmse_new))
+```
+
